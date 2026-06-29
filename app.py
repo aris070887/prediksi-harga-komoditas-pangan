@@ -263,7 +263,7 @@ with col1:
     with tab2:
         st.markdown("##### 🌧️ Grafik Korelasi Curah Hujan Mingguan vs Tren Harga")
         
-        # 1. Inisialisasi Figure dengan layout dual-axis yang bersih
+        # 1. Inisialisasi Figure dual-axis
         fig_korelasi = go.Figure()
         
         # 2. Sumbu Kiri: Harga Riil
@@ -282,20 +282,20 @@ with col1:
             mode='lines',
             name='Curah Hujan (Sumbu Kanan)', 
             line=dict(color='deepskyblue', width=1.5, dash='dash'),
-            yaxis='y2'  # Menembak sumbu Y kedua
+            yaxis='y2'
         ))
         
-        # 4. Atur tata letak mendasar tanpa parameter nested yang berisiko typo
+        # 4. Atur tata letak dengan parameter resmi Plotly
         fig_korelasi.update_layout(
             title=f"Hubungan Curah Hujan vs Harga {komoditas_terpilih}",
             xaxis_title="Periode Waktu",
             yaxis_title="Harga Tingkat Pasar (Rp)",
-            # Konfigurasi sumbu Y kedua secara eksplisit di tingkat atas
+            # Konfigurasi sumbu Y kedua secara valid
             yaxis2=dict(
                 title="Estimasi Curah Hujan (mm)",
                 overlaying="y",
                 side="right",
-                startwith=0
+                rangemode="tozero"  # Menggantikan startwith=0 agar dimulai dari 0
             )
         )
         
