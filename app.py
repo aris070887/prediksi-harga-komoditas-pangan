@@ -129,7 +129,7 @@ def load_and_preprocess_data():
     df_final['Harga_Minggu_Lalu'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Provinsi'])['Harga_Riil'].shift(1)
     df_final['Selisih_Minggu_Lalu'] = (df_final['Harga_Riil'] - df_final['Harga_Minggu_Lalu']).fillna(0)
 
-    df_final['Harga_Lag_2'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Provinsi'])['Harga_Riil'].shift(2).fillna(method='bfill')
+    df_final['Harga_Lag_2'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Provinsi'])['Harga_Riil'].shift(2).bfill()
     return df_final
 
 with st.spinner("Memproses sinkronisasi data spasial & cuaca..."):
