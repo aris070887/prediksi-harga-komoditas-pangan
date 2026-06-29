@@ -268,13 +268,29 @@ with col1:
         fig_korelasi.add_trace(go.Scatter(x=df_filtered['Tanggal'], y=df_filtered['Curah_Hujan'], mode='lines',
                                           name='Curah Hujan (Sumbu Kanan)', line=dict(color='deepskyblue', width=1.5, dash='dash'),
                                           yaxis='y2'))
+        # KODE YANG BENAR & VALID UNTUK PLOTLY DUAL-AXIS
         fig_korelasi.update_layout(
             title=f"Hubungan Curah Hujan vs Harga {komoditas_terpilih} di {prov_terpilih}",
             xaxis=dict(title="Periode Waktu"),
-            yaxis=dict(title="Harga Tingkat Pasar (Rp)", titlefont=dict(color='darkred'), tickfont=dict(color='darkred')),
-            yaxis2=dict(title="Estimasi Curah Hujan (mm)", titlefont=dict(color='deepskyblue'), tickfont=dict(color='deepskyblue'),
-                        overlaying='y', side='right'),
-            legend=dict(x=0.01, y=0.99)
+            yaxis=dict(
+                title="Harga Tingkat Pasar (Rp)", 
+                titlefont=dict(color='darkred'), 
+                tickfont=dict(color='darkred')
+            ),
+            yaxis2=dict(
+                title="Estimasi Curah Hujan (mm)", 
+                titlefont=dict(color='deepskyblue'), 
+                tickfont=dict(color='deepskyblue'),
+                overlaying='y', 
+                side='right'
+            ),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
         st.plotly_chart(fig_korelasi, use_container_width=True)
 
