@@ -206,8 +206,8 @@ with col1:
             st.info("Data spasial tidak tersedia untuk minggu ini.")
         else:
             fig_map = px.choropleth(df_map, geojson=geojson_indo, locations="Provinsi", featureidkey="properties.Propinsi", 
-                                    color="Harga_Riil", hover_name="Provinsi", color_continuous_scale="Reds",
-                                    title=f"Distribusi Harga {komoditas_terpilled} ({pasar_terpilih}) - {minggu_peta}")
+                        color="Harga_Riil", hover_name="Provinsi", color_continuous_scale="Reds",
+                        title=f"Distribusi Harga {komoditas_terpilih} ({pasar_terpilih}) - {minggu_peta}")
             fig_map.update_geos(fitbounds="locations", visible=False)
             st.plotly_chart(fig_map, use_container_width=True)
 
