@@ -247,7 +247,7 @@ with col1:
                 judul_peta = f"Selisih Harga vs Rata-Rata Nasional (Rp)"
             elif metrik_peta == "Selisih vs Minggu Lalu":
                 kolom_peta = "Selisih_Minggu_Lalu"
-                skala_warna = "Cwtex"
+                skala_warna = "RdYlGn_r"
                 judul_peta = f"Perubahan Harga Dibanding Minggu Lalu (Rp)"
             else:
                 kolom_peta = "Selisih_HET"
