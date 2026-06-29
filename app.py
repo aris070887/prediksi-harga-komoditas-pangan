@@ -332,43 +332,69 @@ with col1:
                 st.markdown("##### 🔮 Proyeksi & Prediksi Pergerakan Harga")
                 fig_pred = go.Figure()
                 
-                # Mengambil data historis aktual (12 periode terakhir) agar seimbang
-                df_hist_recent = df_filtered.tail(12)
+                # 1. Mengambil data historis aktual (misal 12 minggu terakhir)
+                df_hist_recent = df_filtered.tail(12).copy()
                 
-                # Jalur Aktual (Line Kontinu)
+                # 2. Plot Data Historis Aktual (Garis Kontinu Gelap)
                 fig_pred.add_trace(go.Scatter(
                     x=df_hist_recent['Tanggal'], 
                     y=df_hist_recent['Harga_Riil'], 
                     mode='lines+markers', 
-                    name='Harga Riil (Aktual)', 
-                    line=dict(color='rgb(44, 62, 80)', width=2.5)
+                    name='Harga Aktual', 
+                    line=dict(color='#1A252C', width=3),
+                    marker=dict(size=6, color='#1A252C')
                 ))
                 
-                # Jalur Hubung antara Aktual Terakhir dengan Prediksi Pertama
-                tgl_hubung = [df_hist_recent['Tanggal'].iloc[-1], df_prediksi['Tanggal'].iloc[0]]
-                val_hubung = [df_hist_recent['Harga_Riil'].iloc[-1], df_prediksi['Harga_Prediksi'].iloc[0]]
+                # 3. Membuat jembatan sambungan kontinuitas (Titik terakhir aktual ke titik pertama prediksi)
+                tgl_sambung = [df_hist_recent['Tanggal'].iloc[-1], df_prediksi['Tanggal'].iloc[0]]
+                val_sambung = [df_hist_recent['Harga_Riil'].iloc[-1], df_prediksi['Harga_Prediksi'].iloc[0]]
+                
                 fig_pred.add_trace(go.Scatter(
-                    x=tgl_hubung, y=val_hubung, mode='lines', 
-                    showlegend=False, line=dict(color='rgb(231, 76, 60)', width=2, dash='dot')
+                    x=tgl_sambung, 
+                    y=val_sambung, 
+                    mode='lines', 
+                    showlegend=False, 
+                    line=dict(color='#E74C3C', width=2.5, dash='solid')
                 ))
                 
-                # Jalur Prediksi AI (Titik Penanda / Sesuai Lampiran Kesatu)
+                # 4. Plot Proyeksi Hasil Prediksi AI (Garis Kontinu Merah)
                 fig_pred.add_trace(go.Scatter(
                     x=df_prediksi['Tanggal'], 
                     y=df_prediksi['Harga_Prediksi'], 
                     mode='lines+markers', 
-                    name='Proyeksi Prediksi AI', 
-                    line=dict(color='rgb(231, 76, 60)', width=2, dash='dash'),
-                    marker=dict(size=8, symbol='circle')
+                    name='Proyeksi AI', 
+                    line=dict(color='#E74C3C', width=3),
+                    marker=dict(size=7, symbol='circle', color='#E74C3C')
                 ))
                 
-                fig_pred.update_layout(xaxis_title="Periode Tanggal", yaxis_title="Harga (Rp)", height=320, margin=dict(t=10, b=10))
+                # 5. Menambahkan Garis Vertikal Penanda Batas Waktu Aktual vs Proyeksi Masa Depan
+                fig_pred.add_vline(
+                    x=df_hist_recent['Tanggal'].iloc[-1], 
+                    line_width=1.5, 
+                    line_dash="dash", 
+                    line_color="gray"
+                )
+                
+                # 6. Menambahkan anotasi teks penanda batas wilayah waktu
+                fig_pred.add_annotation(
+                    x=df_hist_recent['Tanggal'].iloc[-1],
+                    y=max(df_hist_recent['Harga_Riil'].max(), df_prediksi['Harga_Prediksi'].max()),
+                    text="Batas Prediksi AI",
+                    showarrow=False,
+                    textangle=-90,
+                    xshift=-10,
+                    font=dict(size=10, color="gray")
+                )
+                
+                fig_pred.update_layout(
+                    xaxis_title="Periode Tanggal", 
+                    yaxis_title="Harga (Rp)", 
+                    height=320, 
+                    margin=dict(t=15, b=15, l=10, r=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                
                 st.plotly_chart(fig_pred, use_container_width=True)
-            
-            st.markdown("##### 📋 Justifikasi Kelayakan & Evaluasi Akurasi Model")
-            st.dataframe(df_justifikasi, use_container_width=True, hide_index=True)
-        else:
-            st.info("Data tidak mencukupi untuk memuat visualisasi model prediktif.")
 
 with col2:
     st.subheader("🤖 Konsultan Ketahanan Pangan AI")
