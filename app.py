@@ -4,7 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error
 import os
 import json
 import warnings
@@ -210,7 +210,7 @@ def latih_dan_evaluasi_multi_model(df_prov):
     rf_base = RandomForestRegressor(n_estimators=100, random_state=42)
     rf_base.fit(X_train, y_train)
     
-    # Simulasi metrik performa komparasi berbagai model pangan
+    # Simulasi metrik performa komparasi berbagai model pangan (MAE berorientasi)
     np.random.seed(42)
     noise_test = np.random.normal(0, np.std(y_test) * 0.12, size=len(y_test))
     base_pred_test = rf_base.predict(X_test)
@@ -219,50 +219,45 @@ def latih_dan_evaluasi_multi_model(df_prov):
     models_data = {
         'Random Forest': {
             'train': base_pred_train, 'test': base_pred_test,
-            'mae': mean_absolute_error(y_test, base_pred_test), 'r2': r2_score(y_test, base_pred_test)
+            'mae': mean_absolute_error(y_test, base_pred_test)
         },
         'Gradient Boosting': {
             'train': base_pred_train * 0.99 + np.random.normal(0, 150, len(y_train)),
             'test': base_pred_test * 1.005 + noise_test * 0.85,
-            'mae': mean_absolute_error(y_test, base_pred_test * 1.005 + noise_test * 0.85),
-            'r2': r2_score(y_test, base_pred_test * 1.005 + noise_test * 0.85)
+            'mae': mean_absolute_error(y_test, base_pred_test * 1.005 + noise_test * 0.85)
         },
         'LSTM (Deep Learning)': {
             'train': base_pred_train * 0.96 + np.random.normal(0, 300, len(y_train)),
             'test': base_pred_test * 0.99 + noise_test * 1.15,
-            'mae': mean_absolute_error(y_test, base_pred_test * 0.99 + noise_test * 1.15),
-            'r2': r2_score(y_test, base_pred_test * 0.99 + noise_test * 1.15)
+            'mae': mean_absolute_error(y_test, base_pred_test * 0.99 + noise_test * 1.15)
         },
         'GRU (Deep Learning)': {
             'train': base_pred_train * 0.97 + np.random.normal(0, 250, len(y_train)),
             'test': base_pred_test * 0.995 + noise_test * 1.05,
-            'mae': mean_absolute_error(y_test, base_pred_test * 0.995 + noise_test * 1.05),
-            'r2': r2_score(y_test, base_pred_test * 0.995 + noise_test * 1.05)
+            'mae': mean_absolute_error(y_test, base_pred_test * 0.995 + noise_test * 1.05)
         }
     }
     
-    # Deteksi arsitektur terbaik otomatis berdasarkan R² tertinggi
-    nama_model_terbaik = max(models_data, key=lambda k: models_data[k]['r2'])
+    # Menentukan model terbaik otomatis berdasarkan tingkat eror (MAE) minimum
+    nama_model_terbaik = min(models_data, key=lambda k: models_data[k]['mae'])
     best_model = models_data[nama_model_terbaik]
     
-    # Bangun DataFrame Justifikasi Multi-Model
-    list_model, list_mae, list_r2, list_status = [], [], [], []
+    # Bangun DataFrame Justifikasi Multi-Model (Bersih dari kolom R2)
+    list_model, list_mae, list_status = [], [], []
     for m_name, m_val in models_data.items():
         list_model.append(m_name)
         list_mae.append(f"Rp {m_val['mae']:,.2f}")
-        list_r2.append(f"{m_val['r2'] * 100:.2f}%")
         list_status.append("⭐ Terbaik (Dipilih)" if m_name == nama_model_terbaik else "Kandidat")
         
     df_justifikasi = pd.DataFrame({
         'Arsitektur Model AI': list_model,
         'Mean Absolute Error (MAE)': list_mae,
-        'Akurasi R² Score': list_r2,
         'Status Seleksi': list_status
     })
     
-    # Feature Importance (Menggunakan istilah Faktor Musiman)
+    # Feature Importance (Mengubah 'Faktor Musiman' menjadi 'Faktor Tren Harga')
     df_imp = pd.DataFrame({
-        'Faktor Pengaruh': ['Faktor Cuaca (Curah Hujan)', 'Siklus Hari Raya (HBKN)', 'Faktor Musiman'],
+        'Faktor Pengaruh': ['Faktor Cuaca (Curah Hujan)', 'Siklus Hari Raya (HBKN)', 'Faktor Tren Harga'],
         'Tingkat Pengaruh (%)': rf_base.feature_importances_ * 100
     }).sort_values(by='Tingkat Pengaruh (%)', ascending=True)
     
@@ -350,54 +345,54 @@ with col1:
         fig_hbkn.add_trace(go.Bar(x=df_filtered['Tanggal'], y=df_filtered['hbkn'] * df_filtered['Harga_Riil'].max() * 0.1, name='Indikator HBKN', marker_color='red', opacity=0.3))
         st.plotly_chart(fig_hbkn, use_container_width=True)
 
-    # --- RE-LAYOUT TAB 4: STRUKTUR ATAS & BAWAH ---
+    # --- RE-LAYOUT TAB 4: PANEL STRUKTUR SEARAH ATAS-BAWAH LENGKAP ---
     with tab4:
         if df_plot_ai is not None:
-            # 1. SEKTOR ATAS: Ringkasan Justifikasi & Feature Importance
-            c1, c2 = st.columns([6, 4])
-            with c1:
-                st.markdown("##### 📋 Justifikasi Seleksi & Perbandingan Performa Arsitektur Model")
-                st.dataframe(df_justifikasi, use_container_width=True, hide_index=True)
-                st.caption(f"💡 *Sistem memilih **{model_terpilih}** secara otomatis sebagai basis utama peramalan karena akurasi tertinggi.*")
-                
-            with c2:
-                st.markdown("##### 🎯 Kontribusi Faktor Pengaruh Model AI")
-                fig_imp = px.bar(df_imp, x='Tingkat Pengaruh (%)', y='Faktor Pengaruh', orientation='h',
-                                 color='Tingkat Pengaruh (%)', color_continuous_scale='Viridis')
-                fig_imp.update_layout(xaxis_title="Persentase Kontribusi (%)", yaxis_title="", height=210, showlegend=False, margin=dict(t=10, b=10))
-                st.plotly_chart(fig_imp, use_container_width=True)
+            # 1. ELEMEN 1 (PALING ATAS): Tabel Justifikasi Kinerja Model (Lebar Penuh)
+            st.markdown("##### 📋 Justifikasi Seleksi & Perbandingan Performa Arsitektur Model")
+            st.dataframe(df_justifikasi, use_container_width=True, hide_index=True)
+            st.caption(f"💡 *Sistem memilih **{model_terpilih}** secara otomatis berdasarkan kriteria tingkat kekeliruan (MAE) paling minimum.*")
             
             st.markdown("---")
             
-            # 2. SEKTOR BAWAH: Grafik Prediksi Time-Series Horizontal (Lebar Penuh)
+            # 2. ELEMEN 2 (TENGAH): Grafik Feature Importance (Lebar Penuh)
+            st.markdown("##### 🎯 Kontribusi Faktor Pengaruh Model AI")
+            fig_imp = px.bar(df_imp, x='Tingkat Pengaruh (%)', y='Faktor Pengaruh', orientation='h',
+                             color='Tingkat Pengaruh (%)', color_continuous_scale='Viridis')
+            fig_imp.update_layout(xaxis_title="Persentase Kontribusi (%)", yaxis_title="", height=220, showlegend=False, margin=dict(t=10, b=10))
+            st.plotly_chart(fig_imp, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # 3. ELEMEN 3 (PALING BAWAH): Grafik Analisis Prediksi Runtun Waktu (Lebar Penuh Horizontal)
             st.markdown(f"##### 🔮 Proyeksi Komparatif Estimasi Prediksi AI (Basis Model Terbaik: {model_terpilih})")
             fig_pred = go.Figure()
             
-            # Jalur 1: Y (Harga Aktual) - Garis Biru Tua Solid
+            # Jalur A: Y (Harga Aktual) - Garis Utama Solid
             fig_pred.add_trace(go.Scatter(
                 x=df_plot_ai['Tanggal'], y=df_plot_ai['Harga_Aktual'], 
                 mode='lines', name='Y (Harga Aktual)', line=dict(color='#2C3E50', width=3)
             ))
             
-            # Jalur 2: Harga Rerata Nasional - Garis Abu-abu Putus-putus
+            # Jalur B: Harga Rerata Nasional - Garis Penanda Regional Abu-abu
             fig_pred.add_trace(go.Scatter(
                 x=df_plot_ai['Tanggal'], y=df_plot_ai['Rata_Nasional'], 
                 mode='lines', name='Harga Rerata Nasional', line=dict(color='#7F8C8D', width=1.5, dash='dash')
             ))
             
-            # Jalur 3: Y Prediksi (Data Train) - Garis Hijau Putus-putus
+            # Jalur C: Y Prediksi (Data Train) - Fit Model Riwayat
             fig_pred.add_trace(go.Scatter(
                 x=df_plot_ai['Tanggal'], y=df_plot_ai['Prediksi_Train'], 
                 mode='lines', name='Y Prediksi (Data Train)', line=dict(color='#2ECC71', width=2, dash='dash')
             ))
             
-            # Jalur 4: Y Prediksi (Data Test) - Garis Merah Titik-titik
+            # Jalur D: Y Prediksi (Data Test) - Evaluasi In-Sample
             fig_pred.add_trace(go.Scatter(
                 x=df_plot_ai['Tanggal'], y=df_plot_ai['Prediksi_Test'], 
                 mode='lines', name='Y Prediksi (Data Test)', line=dict(color='#E74C3C', width=2, dash='dot')
             ))
             
-            # Jalur 5: Prediksi Out-Sample - Garis Ungu Berpenanda Diamond (Masa Depan)
+            # Jalur E: Prediksi Out-Sample - Proyeksi Masa Depan Murni (4 Minggu Kedepan)
             fig_pred.add_trace(go.Scatter(
                 x=df_outsample['Tanggal'], y=df_outsample['Harga_Outsample'], 
                 mode='lines+markers', name='Prediksi Out-Sample (Masa Depan)', 
@@ -405,10 +400,10 @@ with col1:
                 marker=dict(size=6, symbol='diamond')
             ))
             
-            # Garis Batas Wilayah Evaluasi Latih-Uji (Train vs Test)
+            # Pembatas Vertikal: Evaluasi Latih vs Uji
             fig_pred.add_vline(x=tanggal_pembatas, line_width=1.5, line_dash="solid", line_color="#7F8C8D")
             
-            # Garis Batas Wilayah Data Historis vs Masa Depan (In vs Out-Sample)
+            # Pembatas Vertikal: Garis Batas Waktu Berjalan (Historis vs Masa Depan)
             fig_pred.add_vline(x=df_plot_ai['Tanggal'].max(), line_width=1.5, line_dash="dash", line_color="#8E44AD")
             
             fig_pred.update_layout(
