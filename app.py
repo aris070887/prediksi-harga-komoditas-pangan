@@ -197,12 +197,10 @@ def latih_dan_evaluasi_model(df_prov):
     if len(df_prov) < 8: 
         return None, None, None
     
-    # Menyiapkan fitur modeling
     fitur = ['Curah_Hujan', 'hbkn', 'Harga_Lag_2']
     X = df_prov[fitur].fillna(0)
     y = df_prov['Harga_Riil']
     
-    # Split manual berbasis waktu (80% Train, 20% Test) untuk data deret waktu
     split_idx = int(len(df_prov) * 0.8)
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
@@ -210,36 +208,34 @@ def latih_dan_evaluasi_model(df_prov):
     rf = RandomForestRegressor(n_estimators=100, random_state=42)
     rf.fit(X_train, y_train)
     
-    # Evaluasi Prediksi
     y_pred = rf.predict(X_test)
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
     
-    # Buat tabel justifikasi model
+    # 📋 MODIFIKASI: Format Justifikasi Sesuai Lampiran Kedua
     df_justifikasi = pd.DataFrame({
-        'Metrik Evaluasi Model': ['Mean Absolute Error (MAE)', 'Koefisien Determinasi (R² Score)', 'Ukuran Sampel Data'],
+        'Nama Model / Evaluasi': ['Random Forest (MAE)', 'Random Forest (R²)', 'Dataset (Sample Size)'],
         'Nilai Performa': [f"Rp {mae:,.2f}", f"{r2 * 100:.2f}%", f"{len(df_prov)} Minggu"],
-        'Justifikasi Kelayakan': [
-            "Rata-rata kesalahan absolut prediksi model AI terhadap harga riil lapangan.",
-            "Persentase variabilitas fluktuasi harga yang mampu dijelaskan oleh variabel cuaca & HBKN.",
-            "Total baris data historis regional yang berhasil disinkronkan ke dalam model."
+        'Keterangan Kelayakan': [
+            "Tingkat kesalahan rata-rata model dalam memprediksi fluktuasi harga riil.",
+            "Kemampuan variabel independen (cuaca & HBKN) menjelaskan varians pola pergerakan harga.",
+            "Volume observasi runtun waktu (time series) regional yang diintegrasikan."
         ]
     })
     
-    # Feature Importance Data
+    # 🎯 MODIFIKASI: Feature Importance Menggunakan Istilah 'Faktor Musiman'
     df_imp = pd.DataFrame({
-        'Faktor Pengaruh': ['Curah Hujan (Weather)', 'Siklus Hari Raya (HBKN)', 'Tren Harga Historis (Lag)'],
+        'Faktor Pengaruh': ['Faktor Cuaca (Curah Hujan)', 'Siklus Hari Raya (HBKN)', 'Faktor Musiman'],
         'Tingkat Pengaruh (%)': rf.feature_importances_ * 100
     }).sort_values(by='Tingkat Pengaruh (%)', ascending=True)
     
-    # Prediksi Masa Depan (4 Minggu ke Depan)
+    # 🔮 MODIFIKASI: Proyeksi Prediksi 4 Minggu Masa Depan Sesuai Lampiran Kesatu
     terakhir = df_prov.iloc[-1]
     prediksi_list = []
     tanggal_terakhir = df_prov['Tanggal'].max()
     
     for i in range(1, 5):
         tgl_baru = tanggal_terakhir + pd.Timedelta(weeks=i)
-        # Ambil representasi cuaca linear sederhana ke depan
         X_fut = pd.DataFrame([[terakhir['Curah_Hujan'], terakhir['hbkn'], terakhir['Harga_Riil']]], columns=fitur)
         pred_val = rf.predict(X_fut)[0]
         prediksi_list.append({'Tanggal': tgl_baru, 'Harga_Prediksi': pred_val})
@@ -282,15 +278,15 @@ with col1:
                 judul_peta = f"Harga Riil {komoditas_terpilih} (Rp)"
             elif metrik_peta == "Selisih vs Rata-Rata Nasional":
                 kolom_peta = "Selisih_Nasional"
-                skala_warna = "RdYlGn_r" # Hijau = Rendah/Murah, Merah = Tinggi/Mahal
+                skala_warna = "RdYlGn_r" # Hijau = Aman/Di bawah acuan, Merah = Mahal/Waspada
                 judul_peta = f"Selisih Harga vs Rata-Rata Nasional (Rp)"
             elif metrik_peta == "Selisih vs Minggu Lalu":
                 kolom_peta = "Selisih_Minggu_Lalu"
-                skala_warna = "RdYlGn_r" # Hijau = Harga Turun, Merah = Harga Naik/Melonjak
+                skala_warna = "RdYlGn_r" # Hijau = Turun, Merah = Naik/Melonjak
                 judul_peta = f"Perubahan Harga Dibanding Minggu Lalu (Rp)"
             else:
                 kolom_peta = "Selisih_HET"
-                skala_warna = "RdYlGn_r" # Hijau = Aman di bawah HET, Merah = Melanggar/Di atas HET
+                skala_warna = "RdYlGn_r" # Hijau = Aman di bawah HET, Merah = Di atas HET
                 judul_peta = f"Selisih Harga vs Target HET Regional Spasial (Rp)"
 
             fig_map = px.choropleth(df_map, geojson=geojson_indo, locations="Provinsi", featureidkey="properties.Propinsi", 
@@ -324,28 +320,55 @@ with col1:
 
     with tab4:
         if df_imp is not None:
-            c1, c2 = st.columns([1, 1])
+            c1, c2 = st.columns([4, 6])
             with c1:
-                st.markdown("##### 🎯 Feature Importance Penentu Fluktuasi Harga")
+                st.markdown("##### 🎯 Kontribusi Faktor Pengaruh Model AI")
                 fig_imp = px.bar(df_imp, x='Tingkat Pengaruh (%)', y='Faktor Pengaruh', orientation='h',
                                  color='Tingkat Pengaruh (%)', color_continuous_scale='Viridis')
-                fig_imp.update_layout(xaxis_title="Persentase Kontribusi (%)", yaxis_title="", height=300)
+                fig_imp.update_layout(xaxis_title="Persentase Kontribusi (%)", yaxis_title="", height=320, showlegend=False)
                 st.plotly_chart(fig_imp, use_container_width=True)
                 
             with c2:
-                st.markdown("##### 🔮 Grafik Prediksi 4 Minggu ke Depan")
+                st.markdown("##### 🔮 Proyeksi & Prediksi Pergerakan Harga")
                 fig_pred = go.Figure()
-                # Data historis 8 minggu terakhir agar grafik kontras dan rapi
-                df_hist_recent = df_filtered.tail(8)
-                fig_pred.add_trace(go.Scatter(x=df_hist_recent['Tanggal'], y=df_hist_recent['Harga_Riil'], mode='lines+markers', name='Harga Historis', line=dict(color='gray')))
-                fig_pred.add_trace(go.Scatter(x=df_prediksi['Tanggal'], y=df_prediksi['Harga_Prediksi'], mode='lines+markers', name='Prediksi AI', line=dict(color='blue', dash='dash')))
-                fig_pred.update_layout(xaxis_title="Periode", yaxis_title="Harga (Rp)", height=300, margin=dict(t=20, b=20))
+                
+                # Mengambil data historis aktual (12 periode terakhir) agar seimbang
+                df_hist_recent = df_filtered.tail(12)
+                
+                # Jalur Aktual (Line Kontinu)
+                fig_pred.add_trace(go.Scatter(
+                    x=df_hist_recent['Tanggal'], 
+                    y=df_hist_recent['Harga_Riil'], 
+                    mode='lines+markers', 
+                    name='Harga Riil (Aktual)', 
+                    line=dict(color='rgb(44, 62, 80)', width=2.5)
+                ))
+                
+                # Jalur Hubung antara Aktual Terakhir dengan Prediksi Pertama
+                tgl_hubung = [df_hist_recent['Tanggal'].iloc[-1], df_prediksi['Tanggal'].iloc[0]]
+                val_hubung = [df_hist_recent['Harga_Riil'].iloc[-1], df_prediksi['Harga_Prediksi'].iloc[0]]
+                fig_pred.add_trace(go.Scatter(
+                    x=tgl_hubung, y=val_hubung, mode='lines', 
+                    showlegend=False, line=dict(color='rgb(231, 76, 60)', width=2, dash='dot')
+                ))
+                
+                # Jalur Prediksi AI (Titik Penanda / Sesuai Lampiran Kesatu)
+                fig_pred.add_trace(go.Scatter(
+                    x=df_prediksi['Tanggal'], 
+                    y=df_prediksi['Harga_Prediksi'], 
+                    mode='lines+markers', 
+                    name='Proyeksi Prediksi AI', 
+                    line=dict(color='rgb(231, 76, 60)', width=2, dash='dash'),
+                    marker=dict(size=8, symbol='circle')
+                ))
+                
+                fig_pred.update_layout(xaxis_title="Periode Tanggal", yaxis_title="Harga (Rp)", height=320, margin=dict(t=10, b=10))
                 st.plotly_chart(fig_pred, use_container_width=True)
             
-            st.markdown("##### 📋 Tabel Justifikasi & Validasi Performa Model AI")
+            st.markdown("##### 📋 Justifikasi Kelayakan & Evaluasi Akurasi Model")
             st.dataframe(df_justifikasi, use_container_width=True, hide_index=True)
         else:
-            st.info("Data tidak mencukupi untuk melakukan pemodelan prediksi AI & tabel justifikasi.")
+            st.info("Data tidak mencukupi untuk memuat visualisasi model prediktif.")
 
 with col2:
     st.subheader("🤖 Konsultan Ketahanan Pangan AI")
