@@ -262,36 +262,44 @@ with col1:
 
     with tab2:
         st.markdown("##### 🌧️ Grafik Korelasi Curah Hujan Mingguan vs Tren Harga")
+        
+        # 1. Inisialisasi Figure dengan layout dual-axis yang bersih
         fig_korelasi = go.Figure()
-        fig_korelasi.add_trace(go.Scatter(x=df_filtered['Tanggal'], y=df_filtered['Harga_Riil'], mode='lines+markers',
-                                          name='Harga Riil (Sumbu Kiri)', line=dict(color='darkred', width=2.5)))
-        fig_korelasi.add_trace(go.Scatter(x=df_filtered['Tanggal'], y=df_filtered['Curah_Hujan'], mode='lines',
-                                          name='Curah Hujan (Sumbu Kanan)', line=dict(color='deepskyblue', width=1.5, dash='dash'),
-                                          yaxis='y2'))
-        # KODE YANG BENAR & VALID UNTUK PLOTLY DUAL-AXIS
+        
+        # 2. Sumbu Kiri: Harga Riil
+        fig_korelasi.add_trace(go.Scatter(
+            x=df_filtered['Tanggal'], 
+            y=df_filtered['Harga_Riil'], 
+            mode='lines+markers',
+            name='Harga Riil (Sumbu Kiri)', 
+            line=dict(color='darkred', width=2.5)
+        ))
+        
+        # 3. Sumbu Kanan: Curah Hujan
+        fig_korelasi.add_trace(go.Scatter(
+            x=df_filtered['Tanggal'], 
+            y=df_filtered['Curah_Hujan'], 
+            mode='lines',
+            name='Curah Hujan (Sumbu Kanan)', 
+            line=dict(color='deepskyblue', width=1.5, dash='dash'),
+            yaxis='y2'  # Menembak sumbu Y kedua
+        ))
+        
+        # 4. Atur tata letak mendasar tanpa parameter nested yang berisiko typo
         fig_korelasi.update_layout(
-            title=f"Hubungan Curah Hujan vs Harga {komoditas_terpilih} di {prov_terpilih}",
-            xaxis=dict(title="Periode Waktu"),
-            yaxis=dict(
-                title="Harga Tingkat Pasar (Rp)", 
-                titlefont=dict(color='darkred'), 
-                tickfont=dict(color='darkred')
-            ),
+            title=f"Hubungan Curah Hujan vs Harga {komoditas_terpilih}",
+            xaxis_title="Periode Waktu",
+            yaxis_title="Harga Tingkat Pasar (Rp)",
+            # Konfigurasi sumbu Y kedua secara eksplisit di tingkat atas
             yaxis2=dict(
-                title="Estimasi Curah Hujan (mm)", 
-                titlefont=dict(color='deepskyblue'), 
-                tickfont=dict(color='deepskyblue'),
-                overlaying='y', 
-                side='right'
-            ),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
+                title="Estimasi Curah Hujan (mm)",
+                overlaying="y",
+                side="right",
+                startwith=0
             )
         )
+        
+        # 5. Tampilkan grafik
         st.plotly_chart(fig_korelasi, use_container_width=True)
 
     with tab3:
