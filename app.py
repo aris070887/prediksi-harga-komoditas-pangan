@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.metrics import mean_absolute_error
+from sklearn.ensemble import RandomForestRegressor
 import os
 import json
 import warnings
@@ -13,8 +12,8 @@ from openai import OpenAI
 
 warnings.filterwarnings('ignore')
 
-st.set_page_config(page_title="AI Prediksi Pangan Multi-Komoditas", layout="wide", page_icon="🌾")
-st.title("🌾 Sistem Prediksi & Analisis Spasio-Temporal Pangan Nasional")
+st.set_page_config(page_title="AI Analisis Pangan Komprehensif", layout="wide", page_icon="🌾")
+st.title("🌾 Sistem Analisis Spasio-Temporal & Prediksi Pangan Nasional")
 
 # --- 1A. LOAD GEOJSON ---
 @st.cache_data
@@ -44,7 +43,7 @@ def load_geojson():
     gdf = gdf.dissolve(by='Propinsi').reset_index()
     return json.loads(gdf.to_json())
 
-# --- 1B. ADVANCED DATA LOADER FOR PROD/KONS FILES ---
+# --- 1B. LOAD & PREPROCESS DATA ---
 @st.cache_data
 def load_and_preprocess_data():
     base_dir = 'sample_data'
@@ -52,7 +51,7 @@ def load_and_preprocess_data():
     file_hbkn = os.path.join(base_dir, 'HBKN_Bulanan.csv')
 
     if not os.path.exists(file_hujan) or not os.path.exists(file_hbkn):
-        st.error("Kritis: Berkas Curah Hujan atau HBKN tidak ditemukan di folder 'sample_data/'.")
+        st.error("Kritis: Berkas Curah Hujan atau HBKN tidak ditemukan.")
         st.stop()
 
     df_hujan = pd.read_csv(file_hujan)
@@ -64,17 +63,14 @@ def load_and_preprocess_data():
     file_pengecualian = ['Curah_Hujan_Bulanan.csv', 'HBKN_Bulanan.csv', 'Harga_Produsen_Bulanan.csv', 'Konsumen_Bulanan.csv', 'baca.txt']
     
     if os.path.exists(base_dir):
-        all_files = os.listdir(base_dir)
-        for f in all_files:
+        for f in os.listdir(base_dir):
             if f.endswith('.csv') and f not in file_pengecualian:
                 file_path = os.path.join(base_dir, f)
                 try:
                     df_temp = pd.read_csv(file_path)
                     df_temp.columns = df_temp.columns.str.lower().str.strip()
                     
-                    # Parsing nama file (Contoh: "Cabai Rawit Merah_Konsumen_Harian.csv")
                     nama_bersih = f.replace('.csv', '').replace('_Harian', '')
-                    
                     if '_Konsumen' in nama_bersih:
                         komoditas = nama_bersih.replace('_Konsumen', '').replace('_', ' ').strip()
                         tipe_pasar = 'Konsumen'
@@ -91,35 +87,26 @@ def load_and_preprocess_data():
                 except Exception as e:
                     st.warning(f"Gagal memproses berkas {f}: {e}")
 
-    if not list_df_harga:
-        st.error("Kritis: Tidak ada file data harga komoditas harian yang valid di folder 'sample_data/'.")
-        st.stop()
-
     df_raw_harga = pd.concat(list_df_harga, ignore_index=True)
-    df_raw_harga['harga'] = df_raw_harga['harga'].astype(str).str.replace(r'[^\d]', '', regex=True)
+    df_raw_harga['harga'] = df_raw_harga['harga'].astype(str).str.replace(r'[^\d.]', '', regex=True)
     df_raw_harga['harga'] = pd.to_numeric(df_raw_harga['harga'], errors='coerce')
     df_raw_harga = df_raw_harga.dropna(subset=['harga', 'tanggal', 'provinsi'])
+    
     df_raw_harga['tanggal'] = pd.to_datetime(df_raw_harga['tanggal'], errors='coerce')
     df_raw_harga = df_raw_harga.dropna(subset=['tanggal'])
 
     koreksi_papua = {'PAPUA BARAT DAYA': 'PAPUA BARAT', 'PAPUA SELATAN': 'PAPUA', 'PAPUA TENGAH': 'PAPUA', 'PAPUA PEGUNUNGAN': 'PAPUA'}
     df_raw_harga['provinsi'] = df_raw_harga['provinsi'].astype(str).str.upper().str.strip().replace(koreksi_papua)
 
-    # Agregasi Mingguan menyertakan tipe_pasar
     df_weekly = df_raw_harga.groupby(['komoditas', 'tipe_pasar', 'provinsi', pd.Grouper(key='tanggal', freq='W-MON')]).agg({'harga': 'mean'}).reset_index()
 
-    # Gabung HBKN
     df_hbkn['tanggal'] = pd.to_datetime(df_hbkn['tanggal'], errors='coerce')
-    df_hbkn_weekly = df_hbkn.groupby(pd.Grouper(key='tanggal', freq='W-MON')).agg({
-        'hbkn': 'max',
-        'keterangan': lambda x: 'Normal' if all(x.astype(str).str.lower() == 'tidak ada') else x[x.astype(str).str.lower() != 'tidak ada'].iloc[0]
-    }).reset_index()
+    df_hbkn_weekly = df_hbkn.groupby(pd.Grouper(key='tanggal', freq='W-MON')).agg({'hbkn': 'max', 'keterangan': 'first'}).reset_index()
+    df_hbkn_weekly['keterangan'] = df_hbkn_weekly['keterangan'].fillna('Normal')
 
     df_combined = pd.merge(df_weekly, df_hbkn_weekly, on='tanggal', how='left')
     df_combined['hbkn'] = df_combined['hbkn'].fillna(0)
-    df_combined['keterangan'] = df_combined['keterangan'].fillna('Normal')
 
-    # Gabung Cuaca
     bulan_map = {'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4, 'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8, 'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12}
     df_hujan['Bulan'] = df_hujan['Bulan'].map(bulan_map).fillna(1)
     df_hujan['Nama Provinsi'] = df_hujan['Nama Provinsi'].astype(str).str.upper().str.strip().replace(koreksi_papua)
@@ -134,111 +121,189 @@ def load_and_preprocess_data():
 
     df_final = df_final.rename(columns={'harga': 'Harga_Riil', 'keterangan': 'Momen', 'provinsi': 'Provinsi', 'tanggal': 'Tanggal', 'komoditas': 'Komoditas', 'tipe_pasar': 'Tipe_Pasar'})
     df_final['Tanggal_Str'] = df_final['Tanggal'].dt.strftime('%Y-%m-%d')
-    df_final['Rata_Nasional'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Tanggal'])['Harga_Riil'].transform('mean')
     
+    df_final['Rata_Nasional'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Tanggal'])['Harga_Riil'].transform('mean')
+    df_final['Selisih_Nasional'] = df_final['Harga_Riil'] - df_final['Rata_Nasional']
+    
+    df_final = df_final.sort_values(['Komoditas', 'Tipe_Pasar', 'Provinsi', 'Tanggal'])
+    df_final['Harga_Minggu_Lalu'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Provinsi'])['Harga_Riil'].shift(1)
+    df_final['Selisih_Minggu_Lalu'] = (df_final['Harga_Riil'] - df_final['Harga_Minggu_Lalu']).fillna(0)
+
+    df_final['Harga_Lag_2'] = df_final.groupby(['Komoditas', 'Tipe_Pasar', 'Provinsi'])['Harga_Riil'].shift(2).fillna(method='bfill')
     return df_final
 
-with st.spinner("Menyelaraskan data produsen & konsumen nasional..."):
+with st.spinner("Memproses sinkronisasi data spasial & cuaca..."):
     df_all = load_and_preprocess_data()
     geojson_indo = load_geojson()
 
 # --- 2. SIDEBAR CONFIGURATION ---
 with st.sidebar:
-    st.header("🎯 Parameter Analisis")
-    
-    # Dropdown 1: Komoditas Pokok
+    st.header("🎯 Parameter")
     list_komoditas = sorted(df_all['Komoditas'].unique())
     komoditas_terpilih = st.selectbox("Komoditas:", list_komoditas)
     
-    # Dropdown 2: Tingkat Rantai Pasok (Produsen vs Konsumen)
     list_pasar = sorted(df_all[df_all['Komoditas'] == komoditas_terpilih]['Tipe_Pasar'].unique())
-    pasar_terpilih = st.selectbox("Tingkat Rantai Pasok:", list_pasar)
+    pasar_terpilih = st.selectbox("Rantai Pasok:", list_pasar)
     
-    # Filter Wilayah Berdasarkan Pilihan Atas
-    df_sub = df_all[(df_all['Komoditas'] == komoditas_terpilih) & (df_all['Tipe_Pasar'] == pasar_terpilih)]
+    df_sub = df_all[(df_all['Komoditas'] == komoditas_terpilih) & (df_all['Tipe_Pasar'] == pasar_terpilih)].copy()
     provinsi_list = sorted(df_sub['Provinsi'].unique())
-    default_prov = 'DKI JAKARTA' if 'DKI JAKARTA' in provinsi_list else provinsi_list[0]
-    prov_terpilih = st.selectbox("Provinsi Fokus:", provinsi_list, index=provinsi_list.index(default_prov))
+    prov_terpilih = st.selectbox("Provinsi Fokus:", provinsi_list, index=0 if 'DKI JAKARTA' not in provinsi_list else provinsi_list.index('DKI JAKARTA'))
     
-    api_key = st.text_input("OpenAI API Key (Opsional):", type="password")
+    st.markdown("---")
+    st.header("📋 Pengaturan HET Wilayah")
+    uploaded_het = st.file_uploader("Upload File HET Spasial (CSV):", type=["csv"])
+    
+    # Membaca basis data HET multi-wilayah
+    df_het_mapped = pd.DataFrame()
+    use_uploaded_het = False
+    
+    if uploaded_het is not None:
+        try:
+            df_het_uploaded = pd.read_csv(uploaded_het)
+            df_het_uploaded.columns = df_het_uploaded.columns.str.lower().str.strip()
+            if 'komoditas' in df_het_uploaded.columns and 'provinsi' in df_het_uploaded.columns and 'het' in df_het_uploaded.columns:
+                df_het_uploaded['komoditas'] = df_het_uploaded['komoditas'].str.strip()
+                df_het_uploaded['provinsi'] = df_het_uploaded['provinsi'].str.upper().str.strip()
+                df_het_mapped = df_het_uploaded
+                use_uploaded_het = True
+                st.sidebar.success("✅ HET Spasial Berhasil Diterapkan!")
+            else:
+                st.sidebar.error("❌ Format kolom salah. Harus ada: 'komoditas', 'provinsi', 'het'.")
+        except Exception as e:
+            st.sidebar.error(f"Gagal membaca berkas HET: {e}")
 
     st.markdown("---")
-    st.header("🗺️ Dimensi Spasial")
+    st.header("🗺️ Opsi Peta")
+    metrik_peta = st.radio("Metrik Visualisasi Peta:", 
+                           ["Harga Riil", "Selisih vs Rata-Rata Nasional", "Selisih vs Minggu Lalu", "Selisih vs HET Wilayah"])
     list_minggu = sorted(df_sub['Tanggal_Str'].unique(), reverse=True)
-    minggu_peta = st.selectbox("Minggu Peta:", list_minggu)
+    minggu_peta = st.selectbox("Periode Minggu Peta:", list_minggu)
 
     df_filtered = df_sub[df_sub['Provinsi'] == prov_terpilih]
 
-# --- 3. ML FORECASTING (RANDOM FOREST) ---
-@st.cache_resource(show_spinner="Membuat Pemodelan AI...")
-def train_model(df_prov):
-    df_prov = df_prov.sort_values('Tanggal').reset_index(drop=True)
-    if len(df_prov) < 8: return None, None, None, df_prov, [0]*8, []
-    
-    df_ml = pd.get_dummies(df_prov[['Curah_Hujan', 'Momen']], drop_first=True)
-    feat_names = df_ml.columns.tolist()
-    X, y = df_ml.values, df_prov['Harga_Riil'].values
-    split_idx = int(len(X) * 0.8)
-    
-    rf = RandomForestRegressor(n_estimators=50, random_state=42).fit(X[:split_idx], y[:split_idx])
-    rf_pred = rf.predict(X[split_idx:])
-    
-    future_steps = 8
-    future_dates = [df_prov['Tanggal'].iloc[-1] + pd.Timedelta(days=7*i) for i in range(1, future_steps+1)]
-    future_X = np.tile(X[-1], (future_steps, 1))
-    rf_future = rf.predict(future_X).tolist()
-    
-    return rf, rf_pred, split_idx, df_prov, rf_future, future_dates
+# --- 3. DYNAMIC CALCULATION FOR SPATIAL HET ---
+def kalkulasi_selisih_het(row, minggu_ref):
+    if use_uploaded_het:
+        # Cari HET berdasarkan Komoditas DAN Provinsi spesifik
+        match = df_het_mapped[(df_het_mapped['komoditas'] == row['Komoditas']) & (df_het_mapped['provinsi'] == row['Provinsi'])]
+        if not match.empty:
+            return row['Harga_Riil'] - match['het'].iloc[0]
+            
+    # Fallback jika tidak di-upload atau kombinasi wilayah tidak ditemukan: Pakai rata-rata nasional minggu tersebut
+    return row['Harga_Riil'] - row['Rata_Nasional']
 
-rf_model, rf_pred, split_idx, df_prov, rf_future, future_dates = train_model(df_filtered)
+df_sub['Selisih_HET'] = df_sub.apply(lambda r: kalkulasi_selisih_het(r, minggu_peta), axis=1)
 
-# --- 4. GRAPHICAL DASHBOARD INTERFACE ---
+# --- 4. TRAIN ML MODEL ---
+@st.cache_resource
+def dapatkan_feature_importance(df_prov):
+    if len(df_prov) < 5: return None
+    fitur = ['Curah_Hujan', 'hbkn', 'Harga_Lag_2']
+    X = df_prov[fitur].fillna(0)
+    y = df_prov['Harga_Riil']
+    rf = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, y)
+    return pd.DataFrame({
+        'Faktor Pengaruh': ['Curah Hujan (Weather)', 'Siklus Hari Raya (HBKN)', 'Tren Harga Historis (Lag)'],
+        'Tingkat Pengaruh (%)': rf.feature_importances_ * 100
+    }).sort_values(by='Tingkat Pengaruh (%)', ascending=True)
+
+df_imp = dapatkan_feature_importance(df_filtered)
+
+# --- 5. LAYOUT UTAMA ---
 col1, col2 = st.columns([7, 3])
 
 with col1:
-    st.subheader(f"📊 Tren Harga {komoditas_terpilih} di Tingkat {pasar_terpilih}")
+    st.subheader(f"📊 Dashboard Analisis Dinamis: {komoditas_terpilih} ({prov_terpilih})")
     
-    tab1, tab2 = st.tabs(["🗺️ Peta Spasial Indonesia", "🎉 Koreksi Fluktuasi Mingguan HBKN"])
+    # Keterangan status HET dinamis untuk provinsi fokus
+    if use_uploaded_het:
+        fokus_match = df_het_mapped[(df_het_mapped['komoditas'] == komoditas_terpilih) & (df_het_mapped['provinsi'] == prov_terpilih)]
+        if not fokus_match.empty:
+            st.info(f"📋 **Status HET Wilayah ({prov_terpilih}):** Rp {fokus_match['het'].iloc[0]:,.0f} *(Berdasarkan Berkas CSV)*")
+        else:
+            st.warning(f"⚠️ **Status HET Wilayah ({prov_terpilih}):** Data tidak ada di CSV. Menggunakan Fallback Rata-rata Peta Nasional.")
+    else:
+        st.info("💡 **Status Acuan:** HET tidak di-upload, sistem otomatis menggunakan Rata-rata Nasional sebagai tolok ukur.")
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🗺️ Peta Distribusi Nasional", 
+        "🌧️ Korelasi Cuaca & Harga", 
+        "🎉 Tren Siklus HBKN",
+        "🎯 Feature Importance AI"
+    ])
     
     with tab1:
         df_map = df_sub[df_sub['Tanggal_Str'] == minggu_peta]
         if df_map.empty:
-            st.info("Data spasial tidak tersedia untuk minggu ini.")
+            st.info("Data tidak tersedia untuk minggu terpilih.")
         else:
+            if metrik_peta == "Harga Riil":
+                kolom_peta = "Harga_Riil"
+                skala_warna = "Reds"
+                judul_peta = f"Harga Riil {komoditas_terpilih} (Rp)"
+            elif metrik_peta == "Selisih vs Rata-Rata Nasional":
+                kolom_peta = "Selisih_Nasional"
+                skala_warna = "RdBu_r"
+                judul_peta = f"Selisih Harga vs Rata-Rata Nasional (Rp)"
+            elif metrik_peta == "Selisih vs Minggu Lalu":
+                kolom_peta = "Selisih_Minggu_Lalu"
+                skala_warna = "Cwtex"
+                judul_peta = f"Perubahan Harga Dibanding Minggu Lalu (Rp)"
+            else:
+                kolom_peta = "Selisih_HET"
+                skala_warna = "PRGn" # Ungu = di atas HET (mahal/waspada), Hijau = di bawah HET (aman)
+                judul_peta = f"Selisih Harga vs Target HET Regional Spasial (Rp)"
+
             fig_map = px.choropleth(df_map, geojson=geojson_indo, locations="Provinsi", featureidkey="properties.Propinsi", 
-                        color="Harga_Riil", hover_name="Provinsi", color_continuous_scale="Reds",
-                        title=f"Distribusi Harga {komoditas_terpilih} ({pasar_terpilih}) - {minggu_peta}")
+                                    color=kolom_peta, hover_name="Provinsi", color_continuous_scale=skala_warna,
+                                    title=f"{judul_peta} - Periode {minggu_peta}")
             fig_map.update_geos(fitbounds="locations", visible=False)
             st.plotly_chart(fig_map, use_container_width=True)
 
     with tab2:
-        st.markdown("##### 📈 Hubungan Siklus HBKN Terhadap Lonjakan Harga Mingguan")
-        fig_hbkn_trend = go.Figure()
-        fig_hbkn_trend.add_trace(go.Scatter(x=df_prov['Tanggal'], y=df_prov['Harga_Riil'], mode='lines+markers', name='Harga Aktual (Rp)', line=dict(color='darkred', width=2)))
-        fig_hbkn_trend.add_trace(go.Bar(x=df_prov['Tanggal'], y=df_prov['hbkn'] * df_prov['Harga_Riil'].max() * 0.12, name='Indikator HBKN', marker_color='orange', opacity=0.4))
-        fig_hbkn_trend.update_layout(xaxis_title="Periode Tanggal", yaxis_title="Harga Tingkat Pasar (Rp)", barmode='overlay')
-        st.plotly_chart(fig_hbkn_trend, use_container_width=True)
+        st.markdown("##### 🌧️ Grafik Korelasi Curah Hujan Mingguan vs Tren Harga")
+        fig_korelasi = go.Figure()
+        fig_korelasi.add_trace(go.Scatter(x=df_filtered['Tanggal'], y=df_filtered['Harga_Riil'], mode='lines+markers',
+                                          name='Harga Riil (Sumbu Kiri)', line=dict(color='darkred', width=2.5)))
+        fig_korelasi.add_trace(go.Scatter(x=df_filtered['Tanggal'], y=df_filtered['Curah_Hujan'], mode='lines',
+                                          name='Curah Hujan (Sumbu Kanan)', line=dict(color='deepskyblue', width=1.5, dash='dash'),
+                                          yaxis='y2'))
+        fig_korelasi.update_layout(
+            title=f"Hubungan Curah Hujan vs Harga {komoditas_terpilih} di {prov_terpilih}",
+            xaxis=dict(title="Periode Waktu"),
+            yaxis=dict(title="Harga Tingkat Pasar (Rp)", titlefont=dict(color='darkred'), tickfont=dict(color='darkred')),
+            yaxis2=dict(title="Estimasi Curah Hujan (mm)", titlefont=dict(color='deepskyblue'), tickfont=dict(color='deepskyblue'),
+                        overlaying='y', side='right'),
+            legend=dict(x=0.01, y=0.99)
+        )
+        st.plotly_chart(fig_korelasi, use_container_width=True)
 
-    st.markdown(f"##### 🔮 Prediksi AI Proyeksi 8 Minggu ke Depan")
-    if rf_model is not None and len(rf_pred) > 0:
-        test_dates = df_prov['Tanggal'].iloc[-len(rf_pred):]
-        fig_line = go.Figure()
-        fig_line.add_trace(go.Scatter(x=df_prov['Tanggal'], y=df_prov['Harga_Riil'], mode='lines', name='Harga Sebenarnya', line=dict(color='blue')))
-        fig_line.add_trace(go.Scatter(x=test_dates, y=rf_pred, mode='lines', name='Validasi Historis AI', line=dict(color='green', dash='dot')))
-        fig_line.add_trace(go.Scatter(x=[df_prov['Tanggal'].iloc[-1]] + future_dates, y=[df_prov['Harga_Riil'].iloc[-1]] + rf_future,
-                                      mode='lines+markers', name='Forecasting AI 2 Bulan', line=dict(color='purple', width=3, dash='dash')))
-        fig_line.update_layout(height=320, margin=dict(t=10, b=10))
-        st.plotly_chart(fig_line, use_container_width=True)
-    else:
-        st.info("Data wilayah terpilih belum mencukupi batas minimum permodelan AI jangka panjang.")
+    with tab3:
+        st.markdown("##### 📈 Dampak Siklus HBKN terhadap Fluktuasi")
+        fig_hbkn = go.Figure()
+        fig_hbkn.add_trace(go.Scatter(x=df_filtered['Tanggal'], y=df_filtered['Harga_Riil'], mode='lines+markers', name='Harga Aktual', line=dict(color='orange')))
+        fig_hbkn.add_trace(go.Bar(x=df_filtered['Tanggal'], y=df_filtered['hbkn'] * df_filtered['Harga_Riil'].max() * 0.1, name='Indikator HBKN', marker_color='red', opacity=0.3))
+        st.plotly_chart(fig_hbkn, use_container_width=True)
+
+    with tab4:
+        st.markdown("##### 🎯 Feature Importance (Faktor Utama Penentu Fluktuasi Harga)")
+        if df_imp is not None:
+            fig_imp = px.bar(df_imp, x='Tingkat Pengaruh (%)', y='Faktor Pengaruh', orientation='h',
+                             title=f"Analisis Kontribusi Faktor Terhadap Harga {komoditas_terpilih} di {prov_terpilih}",
+                             color='Tingkat Pengaruh (%)', color_continuous_scale='Viridis')
+            fig_imp.update_layout(xaxis_title="Persentase Kontribusi Pengaruh (%)", yaxis_title="")
+            st.plotly_chart(fig_imp, use_container_width=True)
+        else:
+            st.info("Data tidak mencukupi untuk melakukan ekstraksi Feature Importance AI.")
 
 with col2:
-    st.subheader("🤖 Analisis Rantai Pasok AI")
+    st.subheader("🤖 Konsultan Ketahanan Pangan AI")
+    api_key = st.text_input("OpenAI API Key:", type="password")
     if "messages" not in st.session_state: st.session_state.messages = []
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-    prompt = st.chat_input("Diskusikan intervensi harga pasokan...")
+    prompt = st.chat_input("Tanya strategi pasokan pangan...")
     if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.markdown(prompt)
@@ -247,7 +312,7 @@ with col2:
                 st.warning("⚠️ Masukkan OpenAI API Key di Sidebar.")
             else:
                 client = OpenAI(api_key=api_key)
-                system_prompt = f"Anda adalah pakar pemodelan ketahanan pangan komoditas {komoditas_terpilih} di pasar {pasar_terpilih} wilayah {prov_terpilih}."
+                system_prompt = f"Anda adalah analis ketahanan pangan komoditas {komoditas_terpilih} di pasar {pasar_terpilih} wilayah {prov_terpilih}."
                 messages_for_api = [{"role": "system", "content": system_prompt}] + st.session_state.messages
                 stream = client.chat.completions.create(model="gpt-4o-mini", messages=messages_for_api, stream=True)
                 response = st.write_stream(stream)
