@@ -1,0 +1,12 @@
+streamlit
+altair<5.0.0
+pandas
+numpy<2.0.0
+plotly
+scikit-learn
+tensorflow==2.15.0
+openai
+geopandas
+requests
+shapely
+openpyxl
